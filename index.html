@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" class="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>農曆時空儀表板 · Lunar Spacetime Dashboard</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/lunar-javascript/lunar.js"></script>
+<style>
+  :root { color-scheme: dark; }
+  html,body{
+    background:#08090b;color:#e8e8ea;
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","PingFang TC","Helvetica Neue","Noto Sans TC",sans-serif;
+    font-feature-settings:"ss01","ss02";letter-spacing:.01em;
+  }
+  body{
+    min-height:100vh;
+    background:
+      radial-gradient(circle at 15% -10%,rgba(80,80,140,0.18),transparent 55%),
+      radial-gradient(circle at 85% 110%,rgba(140,80,120,0.10),transparent 50%),
+      #08090b;
+  }
+  .glass{
+    background:rgba(22,22,26,0.7);
+    backdrop-filter:blur(28px) saturate(180%);
+    -webkit-backdrop-filter:blur(28px) saturate(180%);
+    border:1px solid rgba(255,255,255,.07);
+  }
+
+  /* 五行配色 */
+  .wood{color:#5dd39e}.fire{color:#ff6b6b}.earth{color:#d4a87a}.metal{color:#ffd76b}.water{color:#6ba9ff}
+  .wood-bg{background:linear-gradient(180deg,rgba(93,211,158,.10),rgba(93,211,158,.02))}
+  .fire-bg{background:linear-gradient(180deg,rgba(255,107,107,.10),rgba(255,107,107,.02))}
+  .earth-bg{background:linear-gradient(180deg,rgba(212,168,122,.10),rgba(212,168,122,.02))}
+  .metal-bg{background:linear-gradient(180deg,rgba(255,215,107,.10),rgba(255,215,107,.02))}
+  .water-bg{background:linear-gradient(180deg,rgba(107,169,255,.10),rgba(107,169,255,.02))}
+
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+  input[type="number"]{-moz-appearance:textfield}
+
+  /* line overlays */
+  #red-line{
+    position:absolute;height:0;
+    border-top:1.5px solid #ff3b30;
+    box-shadow:0 0 14px rgba(255,59,48,.55);
+    z-index:30;pointer-events:none;
+  }
+  #red-line::before{
+    content:'';position:absolute;left:-5px;top:-5px;width:9px;height:9px;
+    background:#ff3b30;border-radius:50%;box-shadow:0 0 10px rgba(255,59,48,.9);
+  }
+  #red-line::after{
+    content:'NOW';position:absolute;right:4px;top:-12px;
+    font-size:9px;font-weight:600;color:#ff3b30;letter-spacing:.1em;
+    background:rgba(255,59,48,.08);padding:1px 4px;border-radius:3px;
+  }
+  #gray-line{
+    position:absolute;height:0;
+    border-top:1px dashed rgba(200,200,220,.55);
+    z-index:25;pointer-events:none;opacity:0;
+    transition:opacity .12s;
+  }
+  #hud{
+    position:absolute;
+    background:rgba(12,12,16,.96);
+    backdrop-filter:blur(24px) saturate(180%);
+    border:1px solid rgba(255,255,255,.10);
+    border-radius:12px;padding:12px 14px;
+    font-size:11px;line-height:1.55;
+    z-index:50;pointer-events:none;opacity:0;
+    transition:opacity .12s;
+    min-width:240px;max-width:280px;
+    box-shadow:0 12px 40px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.04);
+    will-change:transform,left,top;
+  }
+
+  .day-block{
+    transition:background .12s ease;
+    will-change:contents;
+  }
+  .day-block:hover{background:rgba(255,255,255,.03)}
+  .now-cell{box-shadow:inset 0 0 0 1px rgba(255,59,48,.25);background:rgba(255,59,48,.04)!important}
+
+  .pill{
+    display:inline-flex;align-items:center;
+    padding:2px 7px;border-radius:999px;
+    font-size:10px;font-weight:500;
+    border:1px solid currentColor;
+    background:rgba(255,255,255,0.02);
+  }
+
+  .month-cell{
+    cursor:pointer;transition:all .15s;min-height:104px;
+    background:rgba(0,0,0,.32);
+  }
+  .month-cell:hover{background:rgba(255,255,255,.04)}
+  .month-cell.today{outline:1px solid rgba(255,107,107,.45);background:rgba(255,107,107,.05)}
+  .month-cell.other{opacity:.35}
+
+  .seg-tabs button{padding:.4rem 1rem;border-radius:.45rem;font-size:.72rem;color:#a1a1a8;transition:all .12s}
+  .seg-tabs button.active{background:rgba(255,255,255,.08);color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.05)}
+
+  .pillar-card{
+    display:flex;flex-direction:column;align-items:center;
+    padding:.7rem .5rem;border-radius:.75rem;
+    background:rgba(255,255,255,.025);
+    border:1px solid rgba(255,255,255,.04);
+  }
+
+  .stem-branch{font-weight:700;line-height:1.05}
+  .num{font-family:"SF Mono","JetBrains Mono",ui-monospace,monospace;font-feature-settings:"tnum"}
+
+  .corner-mark{
+    position:absolute;font-size:8.5px;font-weight:600;line-height:1;
+    padding:1px 3px;border-radius:3px;
+  }
+  .mark-void{top:2px;right:2px;color:#c084fc;background:rgba(192,132,252,.10);border:1px solid rgba(192,132,252,.25)}
+  .mark-noble{bottom:2px;right:2px;color:#fbbf24;background:rgba(251,191,36,.10);border:1px solid rgba(251,191,36,.25)}
+
+  ::-webkit-scrollbar{width:8px;height:8px}
+  ::-webkit-scrollbar-thumb{background:rgba(255,255,255,.08);border-radius:4px}
+  ::-webkit-scrollbar-track{background:transparent}
+</style>
+</head>
+<body>
+<div class="max-w-[1480px] mx-auto p-3 md:p-5 space-y-3">
+
+  <!-- ===== Header ===== -->
+  <header class="glass rounded-2xl p-4 md:p-5">
+    <div class="flex items-start justify-between gap-4 flex-wrap">
+      <div>
+        <h1 class="text-lg md:text-xl font-semibold tracking-wide">農曆時空儀表板</h1>
+        <p class="text-[11px] text-gray-500 mt-0.5">
+          Lunar Spacetime Dashboard · 即時時空監測 · 五鼠遁時 · 真太陽時校準
+        </p>
+      </div>
+      <div class="flex items-center gap-2 flex-wrap text-xs">
+        <label class="flex items-center gap-2 bg-black/30 px-3 py-1.5 rounded-lg border border-white/5">
+          <span class="text-gray-400">經度</span>
+          <input id="longitude" type="number" step="0.1" value="-121.8"
+                 class="w-20 bg-transparent outline-none num text-right">
+          <span class="text-gray-600">°</span>
+        </label>
+        <label class="flex items-center gap-2 bg-black/30 px-3 py-1.5 rounded-lg border border-white/5 cursor-pointer select-none">
+          <input type="checkbox" id="useTST" checked class="accent-amber-400">
+          <span>真太陽時</span>
+        </label>
+        <div class="seg-tabs flex bg-black/30 rounded-lg p-1 border border-white/5">
+          <button id="btn-week" class="active">週視圖</button>
+          <button id="btn-month">月視圖</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- pillars -->
+    <div class="mt-4 grid grid-cols-2 md:grid-cols-6 gap-2">
+      <div class="pillar-card md:col-span-2 !items-start !p-3">
+        <div class="text-[10px] text-gray-500 uppercase tracking-[0.2em]">當下時刻 NOW</div>
+        <div class="num text-lg mt-1.5 tracking-wide" id="now-clock">--:--:--</div>
+        <div class="text-[10px] text-gray-500 mt-0.5 num" id="now-tst">真太陽時 --:--:--</div>
+        <div class="text-[10px] text-gray-400 mt-1" id="now-lunar">—</div>
+      </div>
+      <div id="pillar-year" class="pillar-card"></div>
+      <div id="pillar-month" class="pillar-card"></div>
+      <div id="pillar-day" class="pillar-card"></div>
+      <div id="pillar-hour" class="pillar-card"></div>
+    </div>
+
+    <!-- meta + jieqi countdown -->
+    <div class="mt-3 flex items-center justify-between gap-3 flex-wrap text-[11px]">
+      <div id="now-meta" class="text-gray-400 flex items-center gap-2.5 flex-wrap"></div>
+      <div class="text-gray-400 flex items-center gap-2 num">
+        <span class="text-gray-500">下一節氣</span>
+        <span id="next-jieqi" class="text-amber-300 font-semibold">—</span>
+        <span id="jq-countdown" class="text-gray-500">—</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ===== Week View ===== -->
+  <section id="week-view" class="glass rounded-2xl overflow-hidden">
+    <div class="flex items-center justify-between px-4 py-3 border-b border-white/5">
+      <div class="flex items-center gap-2">
+        <button id="prev-week" class="px-2.5 py-1 text-xs bg-black/30 rounded border border-white/5 hover:bg-white/10">←</button>
+        <button id="this-week" class="px-2.5 py-1 text-xs bg-black/30 rounded border border-white/5 hover:bg-white/10">本週</button>
+        <button id="next-week" class="px-2.5 py-1 text-xs bg-black/30 rounded border border-white/5 hover:bg-white/10">→</button>
+        <span id="week-range" class="ml-3 text-xs text-gray-400 num"></span>
+      </div>
+      <div class="text-[10px] text-gray-500">滑鼠移動以即時轉換時空　·　紅線：當下　·　灰線：游標　·　角標：<span class="text-purple-300">空</span>=空亡 <span class="text-amber-300">貴</span>=天乙貴人</div>
+    </div>
+
+    <!-- day headers -->
+    <div id="week-header" class="grid border-b border-white/5"
+         style="grid-template-columns: 70px repeat(7, 1fr);"></div>
+
+    <!-- grid -->
+    <div id="week-grid-wrap" class="relative">
+      <div id="week-grid" class="grid relative"
+           style="grid-template-columns: 70px repeat(7, 1fr); height: 920px;">
+      </div>
+      <div id="red-line"></div>
+      <div id="gray-line"></div>
+      <div id="hud"></div>
+    </div>
+  </section>
+
+  <!-- ===== Month View ===== -->
+  <section id="month-view" class="glass rounded-2xl overflow-hidden hidden">
+    <div class="flex items-center justify-between px-4 py-3 border-b border-white/5">
+      <div class="flex items-center gap-2">
+        <button id="prev-month" class="px-2.5 py-1 text-xs bg-black/30 rounded border border-white/5 hover:bg-white/10">←</button>
+        <button id="this-month" class="px-2.5 py-1 text-xs bg-black/30 rounded border border-white/5 hover:bg-white/10">本月</button>
+        <button id="next-month" class="px-2.5 py-1 text-xs bg-black/30 rounded border border-white/5 hover:bg-white/10">→</button>
+        <span id="month-title" class="ml-3 text-xs text-gray-400"></span>
+      </div>
+      <div class="text-[10px] text-gray-500">點擊任一日期 → 切換至該週視圖</div>
+    </div>
+    <div class="grid grid-cols-7 gap-px bg-white/5">
+      <div class="bg-black/40 text-center py-2 text-[10px] text-gray-400">日</div>
+      <div class="bg-black/40 text-center py-2 text-[10px] text-gray-400">一</div>
+      <div class="bg-black/40 text-center py-2 text-[10px] text-gray-400">二</div>
+      <div class="bg-black/40 text-center py-2 text-[10px] text-gray-400">三</div>
+      <div class="bg-black/40 text-center py-2 text-[10px] text-gray-400">四</div>
+      <div class="bg-black/40 text-center py-2 text-[10px] text-gray-400">五</div>
+      <div class="bg-black/40 text-center py-2 text-[10px] text-gray-400">六</div>
+    </div>
+    <div id="month-grid" class="grid grid-cols-7 gap-px bg-white/5"></div>
+  </section>
+
+  <footer class="text-center text-[10px] text-gray-600 py-2">
+    Powered by <span class="text-gray-400">lunar-javascript</span>　·　干支精算遵循「五鼠遁時」與「23時換日」之傳統　·　真太陽時依經度補正
+  </footer>
+</div>
+
+<script>
+/* ============================================================
+ *  常量
+ * ============================================================ */
+const STEMS    = '甲乙丙丁戊己庚辛壬癸';
+const BRANCHES = '子丑寅卯辰巳午未申酉戌亥';
+const STEM_ELEMENT = {'甲':'wood','乙':'wood','丙':'fire','丁':'fire','戊':'earth','己':'earth','庚':'metal','辛':'metal','壬':'water','癸':'water'};
+const BRANCH_ELEMENT = {'子':'water','丑':'earth','寅':'wood','卯':'wood','辰':'earth','巳':'fire','午':'fire','未':'earth','申':'metal','酉':'metal','戌':'earth','亥':'water'};
+const ELEMENT_NAME = {wood:'木',fire:'火',earth:'土',metal:'金',water:'水'};
+const LIU_HE    = {'子':'丑','丑':'子','寅':'亥','亥':'寅','卯':'戌','戌':'卯','辰':'酉','酉':'辰','巳':'申','申':'巳','午':'未','未':'午'};
+const LIU_CHONG = {'子':'午','午':'子','丑':'未','未':'丑','寅':'申','申':'寅','卯':'酉','酉':'卯','辰':'戌','戌':'辰','巳':'亥','亥':'巳'};
+const TIAN_YI   = {
+  '甲':['丑','未'],'戊':['丑','未'],'庚':['丑','未'],
+  '乙':['子','申'],'己':['子','申'],
+  '丙':['亥','酉'],'丁':['亥','酉'],
+  '壬':['卯','巳'],'癸':['卯','巳'],
+  '辛':['午','寅']
+};
+const WEEKDAYS = ['日','一','二','三','四','五','六'];
+const SHICHEN_FULL = {'子':'子時','丑':'丑時','寅':'寅時','卯':'卯時','辰':'辰時','巳':'巳時','午':'午時','未':'未時','申':'申時','酉':'酉時','戌':'戌時','亥':'亥時'};
+
+/*
+ *  一日 24 小時切為 13 段 (子時跨日，視覺上拆為 子末 0-1 與 子初 23-24)
+ */
+const SEGMENTS = [
+  {label:'子', tag:'末', start:0,  end:1 },
+  {label:'丑', tag:'',   start:1,  end:3 },
+  {label:'寅', tag:'',   start:3,  end:5 },
+  {label:'卯', tag:'',   start:5,  end:7 },
+  {label:'辰', tag:'',   start:7,  end:9 },
+  {label:'巳', tag:'',   start:9,  end:11},
+  {label:'午', tag:'',   start:11, end:13},
+  {label:'未', tag:'',   start:13, end:15},
+  {label:'申', tag:'',   start:15, end:17},
+  {label:'酉', tag:'',   start:17, end:19},
+  {label:'戌', tag:'',   start:19, end:21},
+  {label:'亥', tag:'',   start:21, end:23},
+  {label:'子', tag:'初', start:23, end:24}
+];
+
+/* ============================================================
+ *  狀態
+ * ============================================================ */
+const state = {
+  view: 'week',
+  weekStart: getWeekStart(new Date()),
+  monthCursor: new Date(),
+  longitude: -121.8,
+  useTST: true,
+  mouseX: 0, mouseY: 0,
+  mouseInGrid: false
+};
+
+/* ============================================================
+ *  小工具
+ * ============================================================ */
+const pad = n => String(n).padStart(2,'0');
+const $   = id => document.getElementById(id);
+
+function getWeekStart(d){
+  const x = new Date(d);
+  x.setHours(0,0,0,0);
+  x.setDate(x.getDate() - x.getDay());
+  return x;
+}
+function fmtDate(d){return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`}
+function fmtTime(d){return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`}
+function sameDate(a,b){return a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate()}
+
+/* 真太陽時 = 鐘錶時間 + (經度 - 標準經度) × 4 分鐘 */
+function getTstOffsetMin(date, longitude){
+  const tzH = -date.getTimezoneOffset() / 60;
+  const standardMeridian = tzH * 15;
+  return (longitude - standardMeridian) * 4;
+}
+function toTst(date){
+  if (!state.useTST) return new Date(date);
+  return new Date(date.getTime() + getTstOffsetMin(date, state.longitude) * 60000);
+}
+
+/* lunar-javascript 已內建「23時換日」與「五鼠遁時」 */
+function getPillars(tstDate){
+  const solar = Solar.fromYmdHms(
+    tstDate.getFullYear(), tstDate.getMonth()+1, tstDate.getDate(),
+    tstDate.getHours(), tstDate.getMinutes(), Math.max(0, tstDate.getSeconds())
+  );
+  const lunar = solar.getLunar();
+  return {
+    year:  lunar.getYearInGanZhi(),
+    month: lunar.getMonthInGanZhi(),
+    day:   lunar.getDayInGanZhi(),
+    hour:  lunar.getTimeInGanZhi(),
+    lunar, solar
+  };
+}
+
+/* ============================================================
+ *  四柱卡片
+ * ============================================================ */
+function renderPillarCard(el, label, gz, sub){
+  const sEl = STEM_ELEMENT[gz[0]];
+  const bEl = BRANCH_ELEMENT[gz[1]];
+  el.className = 'pillar-card';
+  el.innerHTML = `
+    <div class="text-[10px] text-gray-500 uppercase tracking-[0.18em]">${label}</div>
+    <div class="stem-branch text-[26px] mt-1">
+      <span class="${sEl}">${gz[0]}</span><span class="${bEl}">${gz[1]}</span>
+    </div>
+    <div class="text-[10px] mt-0.5">
+      <span class="${sEl}">${ELEMENT_NAME[sEl]}</span><span class="text-gray-700">·</span><span class="${bEl}">${ELEMENT_NAME[bEl]}</span>
+      ${sub ? `<span class="text-gray-600 ml-1">${sub}</span>` : ''}
+    </div>
+  `;
+}
+
+/* ============================================================
+ *  週視圖
+ * ============================================================ */
+function renderWeekHeader(){
+  const header = $('week-header');
+  header.innerHTML = '<div></div>';
+  const today = new Date();
+
+  for (let i = 0; i < 7; i++){
+    const d = new Date(state.weekStart);
+    d.setDate(d.getDate() + i);
+    const isToday = sameDate(d, today);
+    const noonTst = toTst(new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0));
+    const p = getPillars(noonTst);
+    const lunar = p.lunar;
+
+    const cell = document.createElement('div');
+    cell.className = `px-2 py-2 text-center border-l border-white/5 ${isToday ? 'bg-amber-400/[0.04]' : ''}`;
+    cell.innerHTML = `
+      <div class="text-[10px] ${isToday ? 'text-amber-300 font-semibold' : 'text-gray-500'}">週${WEEKDAYS[d.getDay()]} ${isToday ? '· 今' : ''}</div>
+      <div class="stem-branch text-[20px] mt-1">
+        <span class="${STEM_ELEMENT[p.day[0]]}">${p.day[0]}</span><span class="${BRANCH_ELEMENT[p.day[1]]}">${p.day[1]}</span>
+      </div>
+      <div class="text-[10px] text-gray-400 mt-0.5">${lunar.getMonthInChinese()}月${lunar.getDayInChinese()}</div>
+      <div class="text-[10px] text-gray-600 num mt-0.5">${pad(d.getMonth()+1)}/${pad(d.getDate())}</div>
+    `;
+    header.appendChild(cell);
+  }
+
+  const start = state.weekStart;
+  const end = new Date(start); end.setDate(end.getDate() + 6);
+  $('week-range').textContent = `${fmtDate(start)} → ${fmtDate(end)}`;
+}
+
+function renderTimeLabels(grid){
+  const col = document.createElement('div');
+  col.className = 'relative border-r border-white/5';
+  for (const seg of SEGMENTS){
+    const top = (seg.start / 24) * 100;
+    const height = ((seg.end - seg.start) / 24) * 100;
+    const div = document.createElement('div');
+    div.className = 'absolute left-0 right-0 flex items-center justify-center border-b border-white/5';
+    div.style.top = top + '%';
+    div.style.height = height + '%';
+    div.innerHTML = `
+      <div class="text-center">
+        <div class="text-[13px] text-gray-200 font-medium">
+          ${seg.label}${seg.tag ? `<span class="text-[9px] text-gray-500 ml-0.5">${seg.tag}</span>` : ''}
+        </div>
+        <div class="text-[9px] text-gray-600 num mt-0.5">${pad(seg.start)}–${seg.end===24?'24':pad(seg.end)}</div>
+      </div>
+    `;
+    col.appendChild(div);
+  }
+  grid.appendChild(col);
+}
+
+function renderDayColumn(grid, date, dayIdx){
+  const col = document.createElement('div');
+  col.className = 'relative border-r border-white/5';
+  col.dataset.dayIdx = dayIdx;
+
+  const today = new Date();
+  const isToday = sameDate(date, today);
+  const nowFrac = today.getHours() + today.getMinutes()/60 + today.getSeconds()/3600;
+
+  for (const seg of SEGMENTS){
+    const midH = (seg.start + seg.end) / 2;
+    const midDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    midDate.setMinutes(midH * 60);
+    const tstDate = toTst(midDate);
+    const p = getPillars(tstDate);
+
+    const sEl = STEM_ELEMENT[p.hour[0]];
+    const bEl = BRANCH_ELEMENT[p.hour[1]];
+
+    const top = (seg.start / 24) * 100;
+    const height = ((seg.end - seg.start) / 24) * 100;
+
+    /* 標記 — 空亡、天乙貴人 */
+    const xunKong  = p.lunar.getDayXunKong() || '';
+    const noblemen = TIAN_YI[p.day[0]] || [];
+    const isVoid   = xunKong.indexOf(p.hour[1]) >= 0;
+    const isNoble  = noblemen.indexOf(p.hour[1]) >= 0;
+
+    /* 是否包含當下 */
+    const isNow = isToday && nowFrac >= seg.start && nowFrac < seg.end;
+
+    const block = document.createElement('div');
+    block.className = `day-block absolute left-0 right-0 border-b border-white/5 px-1.5 py-1 overflow-hidden ${sEl}-bg ${isNow ? 'now-cell' : ''}`;
+    block.style.top = top + '%';
+    block.style.height = height + '%';
+    block.innerHTML = `
+      <div class="stem-branch text-[15px] leading-none">
+        <span class="${sEl}">${p.hour[0]}</span><span class="${bEl}">${p.hour[1]}</span>
+      </div>
+      <div class="text-[9px] text-gray-600 num mt-0.5">${pad(seg.start)}:00–${seg.end===24?'24':pad(seg.end)+':00'}</div>
+      ${isVoid  ? '<div class="corner-mark mark-void">空</div>'  : ''}
+      ${isNoble ? '<div class="corner-mark mark-noble">貴</div>' : ''}
+    `;
+    col.appendChild(block);
+  }
+  grid.appendChild(col);
+}
+
+function renderWeek(){
+  const grid = $('week-grid');
+  grid.innerHTML = '';
+  renderTimeLabels(grid);
+  for (let i = 0; i < 7; i++){
+    const d = new Date(state.weekStart);
+    d.setDate(d.getDate() + i);
+    renderDayColumn(grid, d, i);
+  }
+  renderWeekHeader();
+  requestAnimationFrame(updateRedLine);
+}
+
+/* ============================================================
+ *  紅線 (現在)
+ * ============================================================ */
+function updateRedLine(){
+  const grid = $('week-grid');
+  const wrap = $('week-grid-wrap');
+  const red  = $('red-line');
+  const now  = new Date();
+
+  const todayMid = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const dayIdx = Math.floor((todayMid - state.weekStart) / 86400000);
+  if (dayIdx < 0 || dayIdx > 6){ red.style.display = 'none'; return; }
+  red.style.display = '';
+
+  const hours = now.getHours() + now.getMinutes()/60 + now.getSeconds()/3600;
+  const yPercent = (hours / 24) * 100;
+
+  const gridRect = grid.getBoundingClientRect();
+  const wrapRect = wrap.getBoundingClientRect();
+  const labelW = 70;
+  const dayW = (gridRect.width - labelW) / 7;
+  const left = (gridRect.left - wrapRect.left) + labelW + dayW * dayIdx;
+
+  red.style.top = (gridRect.top - wrapRect.top + (yPercent/100) * gridRect.height) + 'px';
+  red.style.left = left + 'px';
+  red.style.width = dayW + 'px';
+}
+
+/* ============================================================
+ *  灰線 + HUD
+ * ============================================================ */
+function updateGrayLine(){
+  const grid = $('week-grid');
+  const wrap = $('week-grid-wrap');
+  const gray = $('gray-line');
+  const hud  = $('hud');
+
+  if (!state.mouseInGrid){
+    gray.style.opacity = '0';
+    hud.style.opacity  = '0';
+    return;
+  }
+
+  const gridRect = grid.getBoundingClientRect();
+  const wrapRect = wrap.getBoundingClientRect();
+  const labelW = 70;
+  const dayW = (gridRect.width - labelW) / 7;
+  const xInGrid = state.mouseX - gridRect.left;
+  const yInGrid = state.mouseY - gridRect.top;
+
+  if (xInGrid < labelW || yInGrid < 0 || yInGrid > gridRect.height){
+    gray.style.opacity = '0';
+    hud.style.opacity  = '0';
+    return;
+  }
+
+  let dayIdx = Math.floor((xInGrid - labelW) / dayW);
+  dayIdx = Math.max(0, Math.min(6, dayIdx));
+
+  const hoursAxis = (yInGrid / gridRect.height) * 24;
+
+  const wallDate = new Date(state.weekStart);
+  wallDate.setDate(wallDate.getDate() + dayIdx);
+  wallDate.setHours(0,0,0,0);
+  wallDate.setMinutes(hoursAxis * 60);
+
+  const tstDate = toTst(wallDate);
+  const p = getPillars(tstDate);
+  const lunar = p.lunar;
+
+  /* 灰線位置 */
+  gray.style.opacity = '1';
+  gray.style.top  = (gridRect.top - wrapRect.top + yInGrid) + 'px';
+  gray.style.left = ((gridRect.left - wrapRect.left) + labelW + dayW * dayIdx) + 'px';
+  gray.style.width = dayW + 'px';
+
+  /* HUD 位置 */
+  const hudW = 264;
+  let hudX = state.mouseX - wrapRect.left + 16;
+  if (hudX + hudW > wrapRect.width - 8) hudX = state.mouseX - wrapRect.left - hudW - 16;
+  let hudY = state.mouseY - wrapRect.top - 24;
+  if (hudY < 8) hudY = 8;
+  hud.style.left = hudX + 'px';
+  hud.style.top  = hudY + 'px';
+  hud.style.opacity = '1';
+
+  const hStem = p.hour[0], hBranch = p.hour[1];
+  const dStem = p.day[0],  dBranch = p.day[1];
+  const mBranch = p.month[1];
+  const sCol = STEM_ELEMENT[hStem], bCol = BRANCH_ELEMENT[hBranch];
+
+  /* 衝合偵測 */
+  const auras = [];
+  if (LIU_HE[hBranch]    === dBranch) auras.push('<span class="pill text-emerald-300">時·日合</span>');
+  if (LIU_CHONG[hBranch] === dBranch) auras.push('<span class="pill text-rose-300">時·日衝</span>');
+  if (LIU_HE[hBranch]    === mBranch) auras.push('<span class="pill text-emerald-200/80">時·月合</span>');
+  if (LIU_CHONG[hBranch] === mBranch) auras.push('<span class="pill text-rose-200/80">時·月衝</span>');
+
+  /* 空亡 / 貴人 */
+  const xunKong  = lunar.getDayXunKong() || '';
+  const noblemen = TIAN_YI[dStem] || [];
+  if (xunKong.indexOf(hBranch) >= 0)        auras.push('<span class="pill text-purple-300">空亡</span>');
+  if (noblemen.indexOf(hBranch) >= 0)       auras.push('<span class="pill text-amber-300">天乙貴人</span>');
+
+  /* 五行氣場 (四柱八字) */
+  const tally = {wood:0,fire:0,earth:0,metal:0,water:0};
+  [p.year, p.month, p.day, p.hour].forEach(gz => {
+    tally[STEM_ELEMENT[gz[0]]]++;
+    tally[BRANCH_ELEMENT[gz[1]]]++;
+  });
+  const elBars = ['wood','fire','earth','metal','water'].map(el => {
+    const pct = (tally[el] / 8 * 100).toFixed(0);
+    return `<div class="flex items-center gap-1.5 text-[10px]">
+      <span class="${el} w-3 text-center">${ELEMENT_NAME[el]}</span>
+      <div class="flex-1 bg-white/[0.04] rounded h-1 relative overflow-hidden">
+        <div class="${el}" style="position:absolute;inset-block:0;left:0;width:${pct}%;background:currentColor;opacity:.75;border-radius:2px"></div>
+      </div>
+      <span class="num text-gray-500 w-3 text-right">${tally[el]}</span>
+    </div>`;
+  }).join('');
+
+  hud.innerHTML = `
+    <div class="flex items-baseline justify-between mb-1.5">
+      <div class="font-semibold">
+        <span class="text-base ${sCol}">${hStem}</span><span class="text-base ${bCol}">${hBranch}</span>
+        <span class="text-gray-500 text-[10px] font-normal ml-1">${SHICHEN_FULL[hBranch]}</span>
+      </div>
+      <span class="text-[9px] text-gray-600 num">${pad(Math.floor(hoursAxis))}:${pad(Math.floor((hoursAxis%1)*60))}</span>
+    </div>
+    <div class="text-gray-400 space-y-0.5 mb-2 text-[10.5px]">
+      <div>農曆 <span class="text-gray-200">${lunar.getYearInChinese()}年${lunar.getMonthInChinese()}月${lunar.getDayInChinese()}</span> <span class="text-gray-600">${lunar.getYearShengXiao()}</span></div>
+      <div>西曆 <span class="num text-gray-200">${fmtDate(wallDate)} ${pad(wallDate.getHours())}:${pad(wallDate.getMinutes())}</span></div>
+      ${state.useTST ? `<div>真太陽時 <span class="num text-amber-200/80">${fmtDate(tstDate)} ${pad(tstDate.getHours())}:${pad(tstDate.getMinutes())}</span></div>` : ''}
+      <div>四柱 <span class="num text-gray-300">
+        <span class="${STEM_ELEMENT[p.year[0]]}">${p.year[0]}</span><span class="${BRANCH_ELEMENT[p.year[1]]}">${p.year[1]}</span>
+        <span class="${STEM_ELEMENT[p.month[0]]}">${p.month[0]}</span><span class="${BRANCH_ELEMENT[p.month[1]]}">${p.month[1]}</span>
+        <span class="${STEM_ELEMENT[p.day[0]]}">${p.day[0]}</span><span class="${BRANCH_ELEMENT[p.day[1]]}">${p.day[1]}</span>
+        <span class="${sCol}">${hStem}</span><span class="${bCol}">${hBranch}</span>
+      </span></div>
+    </div>
+    <div class="border-t border-white/5 pt-1.5 mb-1.5 space-y-1">
+      <div class="text-[9px] text-gray-600 uppercase tracking-widest mb-1">五行氣場</div>
+      ${elBars}
+    </div>
+    ${auras.length ? `<div class="border-t border-white/5 pt-1.5 flex flex-wrap gap-1">${auras.join('')}</div>` : ''}
+  `;
+}
+
+/* ============================================================
+ *  月視圖
+ * ============================================================ */
+function renderMonth(){
+  const cursor = state.monthCursor;
+  const y = cursor.getFullYear(), m = cursor.getMonth();
+  const firstDay = new Date(y, m, 1);
+  const lastDay  = new Date(y, m+1, 0);
+  const startOffset = firstDay.getDay();
+  const totalCells = Math.ceil((startOffset + lastDay.getDate()) / 7) * 7;
+
+  $('month-title').textContent = `${y}年 ${pad(m+1)}月`;
+
+  const grid = $('month-grid');
+  grid.innerHTML = '';
+
+  const today = new Date();
+
+  for (let i = 0; i < totalCells; i++){
+    const cellDate = new Date(y, m, i - startOffset + 1);
+    const inMonth = cellDate.getMonth() === m;
+    const isToday = sameDate(cellDate, today);
+
+    const noonTst = toTst(new Date(cellDate.getFullYear(), cellDate.getMonth(), cellDate.getDate(), 12, 0, 0));
+    const p = getPillars(noonTst);
+    const lunar = p.lunar;
+    const jq = lunar.getJieQi(); /* 當日是否為節氣 */
+
+    const dayChinese = lunar.getDayInChinese();
+    const showMonthMark = dayChinese === '初一';
+
+    const cell = document.createElement('div');
+    cell.className = `month-cell p-2 ${!inMonth ? 'other' : ''} ${isToday ? 'today' : ''}`;
+    cell.dataset.date = fmtDate(cellDate);
+    cell.innerHTML = `
+      <div class="flex items-baseline justify-between">
+        <span class="text-base font-semibold ${isToday ? 'text-amber-300' : ''}">${cellDate.getDate()}</span>
+        <span class="text-[10px] ${showMonthMark ? 'text-amber-300/80 font-semibold' : 'text-gray-500'}">${showMonthMark ? lunar.getMonthInChinese()+'月' : dayChinese}</span>
+      </div>
+      ${jq ? `<div class="text-[10px] text-amber-300 mt-0.5 font-medium">● ${jq}</div>` : ''}
+      <div class="mt-1 space-y-0.5 stem-branch text-[11.5px] leading-tight">
+        <div><span class="text-gray-600 text-[9px] mr-1">年</span><span class="${STEM_ELEMENT[p.year[0]]}">${p.year[0]}</span><span class="${BRANCH_ELEMENT[p.year[1]]}">${p.year[1]}</span></div>
+        <div><span class="text-gray-600 text-[9px] mr-1">月</span><span class="${STEM_ELEMENT[p.month[0]]}">${p.month[0]}</span><span class="${BRANCH_ELEMENT[p.month[1]]}">${p.month[1]}</span></div>
+        <div class="font-bold"><span class="text-gray-600 text-[9px] mr-1">日</span><span class="${STEM_ELEMENT[p.day[0]]}">${p.day[0]}</span><span class="${BRANCH_ELEMENT[p.day[1]]}">${p.day[1]}</span></div>
+      </div>
+    `;
+    cell.addEventListener('click', () => {
+      state.weekStart = getWeekStart(cellDate);
+      switchView('week');
+    });
+    grid.appendChild(cell);
+  }
+}
+
+/* ============================================================
+ *  Header — 當下卡片 + 節氣倒計時
+ * ============================================================ */
+function renderNow(){
+  const now = new Date();
+  $('now-clock').textContent = fmtTime(now);
+
+  const tstNow = toTst(now);
+  $('now-tst').textContent = state.useTST
+    ? `TST ${fmtTime(tstNow)} (offset ${getTstOffsetMin(now, state.longitude).toFixed(1)} min)`
+    : `本地時間 (TST 已關閉)`;
+
+  const p = getPillars(tstNow);
+  const lunar = p.lunar;
+
+  $('now-lunar').innerHTML = `${lunar.getYearInChinese()}年 · ${lunar.getMonthInChinese()}月${lunar.getDayInChinese()} · 屬<span class="text-amber-300">${lunar.getYearShengXiao()}</span>`;
+
+  renderPillarCard($('pillar-year'),  '年柱',  p.year,  lunar.getYearShengXiao());
+  renderPillarCard($('pillar-month'), '月柱',  p.month);
+  renderPillarCard($('pillar-day'),   '日柱',  p.day);
+  renderPillarCard($('pillar-hour'),  '時柱',  p.hour, SHICHEN_FULL[p.hour[1]]);
+
+  /* meta line */
+  const xunKong  = lunar.getDayXunKong() || '';
+  const noblemen = TIAN_YI[p.day[0]] || [];
+  const meta = [];
+  meta.push(`<span class="text-gray-500">空亡</span> <span class="text-purple-300 font-semibold">${xunKong || '—'}</span>`);
+  meta.push(`<span class="text-gray-500">日柱貴人</span> <span class="text-amber-300 font-semibold">${noblemen.join('·') || '無'}</span>`);
+  if (LIU_CHONG[p.hour[1]] === p.day[1]) meta.push(`<span class="pill text-rose-300">時衝日</span>`);
+  if (LIU_HE[p.hour[1]]    === p.day[1]) meta.push(`<span class="pill text-emerald-300">時合日</span>`);
+  if (LIU_CHONG[p.hour[1]] === p.month[1]) meta.push(`<span class="pill text-rose-200/80">時衝月</span>`);
+  if (LIU_HE[p.hour[1]]    === p.month[1]) meta.push(`<span class="pill text-emerald-200/80">時合月</span>`);
+  if (xunKong.indexOf(p.hour[1]) >= 0)     meta.push(`<span class="pill text-purple-300">時入空亡</span>`);
+  if (noblemen.indexOf(p.hour[1]) >= 0)    meta.push(`<span class="pill text-amber-300">時臨貴人</span>`);
+  $('now-meta').innerHTML = meta.join('<span class="text-gray-700">·</span>');
+
+  /* next jieqi */
+  try {
+    const nj = lunar.getNextJieQi();
+    if (nj){
+      const ns = nj.getSolar();
+      const njDate = new Date(ns.getYear(), ns.getMonth()-1, ns.getDay(), ns.getHour(), ns.getMinute(), ns.getSecond());
+      $('next-jieqi').textContent = `${nj.getName()}　${fmtDate(njDate)} ${pad(njDate.getHours())}:${pad(njDate.getMinutes())}`;
+      const diff = njDate - now;
+      if (diff > 0){
+        const days  = Math.floor(diff / 86400000);
+        const hours = Math.floor((diff % 86400000) / 3600000);
+        const mins  = Math.floor((diff % 3600000) / 60000);
+        const secs  = Math.floor((diff % 60000) / 1000);
+        $('jq-countdown').textContent = `· 倒數 ${days}天 ${pad(hours)}:${pad(mins)}:${pad(secs)}`;
+      } else {
+        $('jq-countdown').textContent = '';
+      }
+    }
+  } catch(e){
+    $('jq-countdown').textContent = '';
+  }
+}
+
+/* ============================================================
+ *  視圖切換
+ * ============================================================ */
+function switchView(v){
+  state.view = v;
+  $('week-view').classList.toggle('hidden', v !== 'week');
+  $('month-view').classList.toggle('hidden', v !== 'month');
+  $('btn-week').classList.toggle('active', v === 'week');
+  $('btn-month').classList.toggle('active', v === 'month');
+  if (v === 'week') renderWeek();
+  else renderMonth();
+}
+
+/* ============================================================
+ *  事件
+ * ============================================================ */
+function setupEvents(){
+  $('btn-week').addEventListener('click',  () => switchView('week'));
+  $('btn-month').addEventListener('click', () => switchView('month'));
+
+  $('prev-week').addEventListener('click', () => {
+    const d = new Date(state.weekStart); d.setDate(d.getDate() - 7);
+    state.weekStart = d; renderWeek();
+  });
+  $('next-week').addEventListener('click', () => {
+    const d = new Date(state.weekStart); d.setDate(d.getDate() + 7);
+    state.weekStart = d; renderWeek();
+  });
+  $('this-week').addEventListener('click', () => {
+    state.weekStart = getWeekStart(new Date()); renderWeek();
+  });
+
+  $('prev-month').addEventListener('click', () => {
+    const d = new Date(state.monthCursor); d.setDate(1); d.setMonth(d.getMonth() - 1);
+    state.monthCursor = d; renderMonth();
+  });
+  $('next-month').addEventListener('click', () => {
+    const d = new Date(state.monthCursor); d.setDate(1); d.setMonth(d.getMonth() + 1);
+    state.monthCursor = d; renderMonth();
+  });
+  $('this-month').addEventListener('click', () => {
+    state.monthCursor = new Date(); renderMonth();
+  });
+
+  $('longitude').addEventListener('input', e => {
+    const v = parseFloat(e.target.value);
+    if (!isNaN(v)){ state.longitude = v; rerenderAll(); }
+  });
+  $('useTST').addEventListener('change', e => {
+    state.useTST = e.target.checked; rerenderAll();
+  });
+
+  /* 滑鼠追蹤 — 使用 rAF 平滑化 */
+  const wrap = $('week-grid-wrap');
+  let raf = null;
+  wrap.addEventListener('mousemove', e => {
+    state.mouseX = e.clientX;
+    state.mouseY = e.clientY;
+    state.mouseInGrid = true;
+    if (!raf){
+      raf = requestAnimationFrame(() => { updateGrayLine(); raf = null; });
+    }
+  });
+  wrap.addEventListener('mouseleave', () => {
+    state.mouseInGrid = false;
+    updateGrayLine();
+  });
+
+  window.addEventListener('resize', () => {
+    if (state.view === 'week'){
+      updateRedLine();
+      if (state.mouseInGrid) updateGrayLine();
+    }
+  });
+}
+
+function rerenderAll(){
+  renderNow();
+  if (state.view === 'week') renderWeek();
+  else renderMonth();
+}
+
+/* ============================================================
+ *  Init
+ * ============================================================ */
+function init(){
+  if (typeof Solar === 'undefined' || typeof Lunar === 'undefined'){
+    document.body.innerHTML = '<div style="padding:40px;text-align:center;color:#ff6b6b;font-family:sans-serif">⚠ lunar-javascript 未能載入，請檢查網路連線。</div>';
+    return;
+  }
+  setupEvents();
+  rerenderAll();
+
+  /* 每秒更新時鐘 + 紅線 + 倒計時 */
+  setInterval(() => {
+    renderNow();
+    if (state.view === 'week') updateRedLine();
+  }, 1000);
+}
+
+if (document.readyState === 'loading'){
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
+</script>
+</body>
+</html>
