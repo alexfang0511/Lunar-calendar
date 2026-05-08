@@ -61,6 +61,33 @@
     z-index:25;pointer-events:none;opacity:0;
     transition:opacity .12s;
   }
+  #anchor-line{
+    position:absolute;height:0;
+    border-top:1.5px solid #22d3ee;
+    box-shadow:0 0 12px rgba(34,211,238,.5);
+    z-index:28;pointer-events:none;display:none;
+  }
+  #anchor-line::before{
+    content:'';position:absolute;left:-5px;top:-5px;width:9px;height:9px;
+    background:#22d3ee;border-radius:2px;transform:rotate(45deg);
+    box-shadow:0 0 10px rgba(34,211,238,.9);
+  }
+  #anchor-line::after{
+    content:'ANCHOR';position:absolute;right:4px;top:-12px;
+    font-size:9px;font-weight:600;color:#22d3ee;letter-spacing:.1em;
+    background:rgba(34,211,238,.08);padding:1px 4px;border-radius:3px;
+  }
+  #anchor-badge{
+    position:absolute;display:none;
+    background:rgba(8,28,32,.96);
+    backdrop-filter:blur(20px);
+    border:1px solid rgba(34,211,238,.30);
+    border-radius:10px;padding:9px 11px;
+    font-size:10.5px;line-height:1.5;
+    z-index:32;pointer-events:none;
+    min-width:200px;max-width:240px;
+    box-shadow:0 10px 28px rgba(0,0,0,.55),0 0 0 1px rgba(34,211,238,.08);
+  }
   #hud{
     position:absolute;
     background:rgba(12,12,16,.96);
@@ -136,6 +163,14 @@
         </p>
       </div>
       <div class="flex items-center gap-2 flex-wrap text-xs">
+        <div class="flex items-center gap-1 bg-black/30 pl-3 pr-1 py-1 rounded-lg border border-cyan-300/15 hover:border-cyan-300/30 transition">
+          <span class="text-cyan-300/80">⌖ 跳轉</span>
+          <input id="jump-datetime" type="datetime-local"
+                 class="bg-transparent outline-none num text-[11px] text-gray-200"
+                 style="color-scheme:dark">
+          <button id="jump-go" class="text-cyan-300 hover:text-cyan-200 px-2 py-0.5 text-[11px] font-semibold rounded hover:bg-cyan-300/10">GO</button>
+          <button id="jump-clear" class="text-gray-500 hover:text-rose-300 px-1.5 py-0.5 text-xs rounded hover:bg-white/5 hidden" title="清除錨點">×</button>
+        </div>
         <label class="flex items-center gap-2 bg-black/30 px-3 py-1.5 rounded-lg border border-white/5">
           <span class="text-gray-400">經度</span>
           <input id="longitude" type="number" step="0.1" value="-121.8"
@@ -201,6 +236,8 @@
       </div>
       <div id="red-line"></div>
       <div id="gray-line"></div>
+      <div id="anchor-line"></div>
+      <div id="anchor-badge"></div>
       <div id="hud"></div>
     </div>
   </section>
@@ -283,7 +320,8 @@ const state = {
   longitude: -121.8,
   useTST: true,
   mouseX: 0, mouseY: 0,
-  mouseInGrid: false
+  mouseInGrid: false,
+  anchor: null   /* 搜尋錨點 (Date)；null 表示無錨點 */
 };
 
 /* ============================================================
@@ -463,7 +501,115 @@ function renderWeek(){
     renderDayColumn(grid, d, i);
   }
   renderWeekHeader();
-  requestAnimationFrame(updateRedLine);
+  requestAnimationFrame(() => { updateRedLine(); updateAnchorLine(); });
+}
+
+/* ============================================================
+ *  錨點線 (搜尋結果) — 持續存在直到清除
+ * ============================================================ */
+function updateAnchorLine(){
+  const grid  = $('week-grid');
+  const wrap  = $('week-grid-wrap');
+  const line  = $('anchor-line');
+  const badge = $('anchor-badge');
+  const anchor = state.anchor;
+
+  if (!anchor){
+    line.style.display = 'none';
+    badge.style.display = 'none';
+    return;
+  }
+
+  const anchorMid = new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate());
+  const dayIdx = Math.floor((anchorMid - state.weekStart) / 86400000);
+  if (dayIdx < 0 || dayIdx > 6){
+    line.style.display = 'none';
+    badge.style.display = 'none';
+    return;
+  }
+
+  line.style.display = '';
+  badge.style.display = '';
+
+  const hours = anchor.getHours() + anchor.getMinutes()/60 + (anchor.getSeconds()||0)/3600;
+  const yPercent = (hours / 24) * 100;
+
+  const gridRect = grid.getBoundingClientRect();
+  const wrapRect = wrap.getBoundingClientRect();
+  const labelW = 70;
+  const dayW = (gridRect.width - labelW) / 7;
+  const left = (gridRect.left - wrapRect.left) + labelW + dayW * dayIdx;
+  const yPx = (gridRect.top - wrapRect.top) + (yPercent/100) * gridRect.height;
+
+  line.style.top   = yPx + 'px';
+  line.style.left  = left + 'px';
+  line.style.width = dayW + 'px';
+
+  /* badge 內容 */
+  const tstAnchor = toTst(anchor);
+  const p = getPillars(tstAnchor);
+  const lunar = p.lunar;
+  const sCol = STEM_ELEMENT[p.hour[0]], bCol = BRANCH_ELEMENT[p.hour[1]];
+
+  const xunKong  = lunar.getDayXunKong() || '';
+  const noblemen = TIAN_YI[p.day[0]] || [];
+  const tags = [];
+  if (LIU_HE[p.hour[1]]    === p.day[1])   tags.push('<span class="pill text-emerald-300">時·日合</span>');
+  if (LIU_CHONG[p.hour[1]] === p.day[1])   tags.push('<span class="pill text-rose-300">時·日衝</span>');
+  if (LIU_HE[p.hour[1]]    === p.month[1]) tags.push('<span class="pill text-emerald-200/80">時·月合</span>');
+  if (LIU_CHONG[p.hour[1]] === p.month[1]) tags.push('<span class="pill text-rose-200/80">時·月衝</span>');
+  if (xunKong.indexOf(p.hour[1]) >= 0)     tags.push('<span class="pill text-purple-300">空亡</span>');
+  if (noblemen.indexOf(p.hour[1]) >= 0)    tags.push('<span class="pill text-amber-300">天乙貴人</span>');
+
+  badge.innerHTML = `
+    <div class="flex items-baseline justify-between mb-1">
+      <span class="text-[9px] tracking-[0.2em] text-cyan-300/80 font-semibold">⌖ ANCHOR</span>
+      <span class="num text-[9px] text-gray-600">${pad(anchor.getHours())}:${pad(anchor.getMinutes())}</span>
+    </div>
+    <div class="font-semibold mb-1">
+      <span class="text-base ${STEM_ELEMENT[p.year[0]]}">${p.year[0]}</span><span class="text-base ${BRANCH_ELEMENT[p.year[1]]}">${p.year[1]}</span>
+      <span class="text-base ${STEM_ELEMENT[p.month[0]]}">${p.month[0]}</span><span class="text-base ${BRANCH_ELEMENT[p.month[1]]}">${p.month[1]}</span>
+      <span class="text-base ${STEM_ELEMENT[p.day[0]]}">${p.day[0]}</span><span class="text-base ${BRANCH_ELEMENT[p.day[1]]}">${p.day[1]}</span>
+      <span class="text-base ${sCol}">${p.hour[0]}</span><span class="text-base ${bCol}">${p.hour[1]}</span>
+    </div>
+    <div class="text-gray-400 space-y-0.5">
+      <div>農曆 <span class="text-gray-200">${lunar.getYearInChinese()}年${lunar.getMonthInChinese()}月${lunar.getDayInChinese()}</span> <span class="text-gray-600">${lunar.getYearShengXiao()}</span></div>
+      <div>西曆 <span class="num text-gray-200">${fmtDate(anchor)} ${pad(anchor.getHours())}:${pad(anchor.getMinutes())}</span></div>
+      ${state.useTST ? `<div>真太陽時 <span class="num text-amber-200/80">${pad(tstAnchor.getHours())}:${pad(tstAnchor.getMinutes())}</span></div>` : ''}
+    </div>
+    ${tags.length ? `<div class="border-t border-cyan-300/10 pt-1.5 mt-1.5 flex flex-wrap gap-1">${tags.join('')}</div>` : ''}
+  `;
+
+  /* badge 位置：優先放在錨點線右側；空間不足則放左側 */
+  const badgeW = 224;
+  let bx = left + dayW + 8;
+  if (bx + badgeW > wrapRect.width - 8) bx = left - badgeW - 8;
+  if (bx < 8) bx = 8;
+  let by = yPx - 12;
+  const maxY = wrapRect.height - 160;
+  if (by > maxY) by = maxY;
+  if (by < 8) by = 8;
+  badge.style.left = bx + 'px';
+  badge.style.top  = by + 'px';
+}
+
+/* ============================================================
+ *  跳轉 — 將錨點時刻置於可視週中
+ * ============================================================ */
+function jumpToAnchor(d){
+  if (!d || isNaN(d.getTime())) return;
+  state.anchor = d;
+  state.weekStart = getWeekStart(d);
+  $('jump-clear').classList.remove('hidden');
+  switchView('week');
+  /* 等下一幀 layout 完成再定位 */
+  requestAnimationFrame(() => requestAnimationFrame(updateAnchorLine));
+}
+function clearAnchor(){
+  state.anchor = null;
+  $('jump-clear').classList.add('hidden');
+  $('jump-datetime').value = '';
+  updateAnchorLine();
 }
 
 /* ============================================================
@@ -798,9 +944,28 @@ function setupEvents(){
   window.addEventListener('resize', () => {
     if (state.view === 'week'){
       updateRedLine();
+      updateAnchorLine();
       if (state.mouseInGrid) updateGrayLine();
     }
   });
+
+  /* 跳轉 / 搜尋 */
+  const jumpInput = $('jump-datetime');
+  function doJump(){
+    const v = jumpInput.value;
+    if (!v) return;
+    /* datetime-local 採本地時區解析 */
+    const d = new Date(v);
+    if (isNaN(d.getTime())) return;
+    jumpToAnchor(d);
+  }
+  $('jump-go').addEventListener('click', doJump);
+  $('jump-clear').addEventListener('click', clearAnchor);
+  jumpInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter'){ e.preventDefault(); doJump(); }
+  });
+  /* change 事件：選完 picker 立即跳 */
+  jumpInput.addEventListener('change', doJump);
 }
 
 function rerenderAll(){
@@ -823,7 +988,10 @@ function init(){
   /* 每秒更新時鐘 + 紅線 + 倒計時 */
   setInterval(() => {
     renderNow();
-    if (state.view === 'week') updateRedLine();
+    if (state.view === 'week'){
+      updateRedLine();
+      if (state.anchor) updateAnchorLine();
+    }
   }, 1000);
 }
 
