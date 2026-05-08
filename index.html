@@ -171,12 +171,17 @@
           <button id="jump-go" class="text-cyan-300 hover:text-cyan-200 px-2 py-0.5 text-[11px] font-semibold rounded hover:bg-cyan-300/10">GO</button>
           <button id="jump-clear" class="text-gray-500 hover:text-rose-300 px-1.5 py-0.5 text-xs rounded hover:bg-white/5 hidden" title="清除錨點">×</button>
         </div>
-        <label class="flex items-center gap-2 bg-black/30 px-3 py-1.5 rounded-lg border border-white/5">
+        <div class="flex items-center gap-2 bg-black/30 px-3 py-1.5 rounded-lg border border-white/5">
+          <span class="text-gray-400">時區</span>
+          <select id="tz-preset"
+                  class="bg-black/40 border border-white/10 rounded text-[11px] py-0.5 px-1.5 outline-none cursor-pointer hover:border-white/25"
+                  style="color-scheme:dark;max-width:170px"></select>
+          <span class="text-gray-700">·</span>
           <span class="text-gray-400">經度</span>
           <input id="longitude" type="number" step="0.1" value="-121.8"
-                 class="w-20 bg-transparent outline-none num text-right">
+                 class="w-16 bg-transparent outline-none num text-right">
           <span class="text-gray-600">°</span>
-        </label>
+        </div>
         <label class="flex items-center gap-2 bg-black/30 px-3 py-1.5 rounded-lg border border-white/5 cursor-pointer select-none">
           <input type="checkbox" id="useTST" checked class="accent-amber-400">
           <span>真太陽時</span>
@@ -291,6 +296,62 @@ const TIAN_YI   = {
 const WEEKDAYS = ['日','一','二','三','四','五','六'];
 const SHICHEN_FULL = {'子':'子時','丑':'丑時','寅':'寅時','卯':'卯時','辰':'辰時','巳':'巳時','午':'午時','未':'未時','申':'申時','酉':'酉時','戌':'戌時','亥':'亥時'};
 
+/* 城市時區預設 — 選一項會同時設定 utcOffset (用於決定標準經線) 與 longitude (城市實際經度) */
+const TZ_PRESETS = [
+  { tz:-10, label:'UTC-10 夏威夷',     cities:[{n:'檀香山',lon:-157.9}]},
+  { tz:-9,  label:'UTC-9 阿拉斯加',    cities:[{n:'安克拉治',lon:-149.9}]},
+  { tz:-8,  label:'UTC-8 太平洋',      cities:[
+    {n:'舊金山/聖荷西',lon:-121.8},{n:'洛杉磯',lon:-118.2},
+    {n:'西雅圖',lon:-122.3},{n:'拉斯維加斯',lon:-115.1},
+    {n:'溫哥華',lon:-123.1},{n:'標準經度 PST',lon:-120}]},
+  { tz:-7,  label:'UTC-7 山區',        cities:[
+    {n:'丹佛',lon:-105.0},{n:'鳳凰城',lon:-112.1},{n:'鹽湖城',lon:-111.9},
+    {n:'標準經度 MST',lon:-105}]},
+  { tz:-6,  label:'UTC-6 中部',        cities:[
+    {n:'芝加哥',lon:-87.7},{n:'休士頓',lon:-95.4},{n:'達拉斯',lon:-96.8},
+    {n:'墨西哥城',lon:-99.1},{n:'標準經度 CST',lon:-90}]},
+  { tz:-5,  label:'UTC-5 東部',        cities:[
+    {n:'紐約',lon:-74.0},{n:'多倫多',lon:-79.4},{n:'邁阿密',lon:-80.2},
+    {n:'波士頓',lon:-71.1},{n:'華盛頓DC',lon:-77.0},{n:'標準經度 EST',lon:-75}]},
+  { tz:-3,  label:'UTC-3 南美',        cities:[
+    {n:'聖保羅',lon:-46.6},{n:'里約熱內盧',lon:-43.2},{n:'布宜諾斯艾利斯',lon:-58.4}]},
+  { tz: 0,  label:'UTC+0 格林威治',    cities:[
+    {n:'倫敦',lon:-0.1},{n:'里斯本',lon:-9.1},{n:'都柏林',lon:-6.3},
+    {n:'標準經度 GMT',lon:0}]},
+  { tz: 1,  label:'UTC+1 中歐',        cities:[
+    {n:'巴黎',lon:2.3},{n:'柏林',lon:13.4},{n:'羅馬',lon:12.5},
+    {n:'馬德里',lon:-3.7},{n:'阿姆斯特丹',lon:4.9},{n:'標準經度 CET',lon:15}]},
+  { tz: 2,  label:'UTC+2 東歐/中東',   cities:[
+    {n:'雅典',lon:23.7},{n:'伊斯坦堡',lon:29.0},{n:'開羅',lon:31.2},
+    {n:'約翰尼斯堡',lon:28.0},{n:'標準經度 EET',lon:30}]},
+  { tz: 3,  label:'UTC+3',             cities:[
+    {n:'莫斯科',lon:37.6},{n:'利雅德',lon:46.7},{n:'內羅畢',lon:36.8}]},
+  { tz: 4,  label:'UTC+4',             cities:[
+    {n:'杜拜',lon:55.3},{n:'阿布達比',lon:54.4}]},
+  { tz: 5.5,label:'UTC+5:30 印度',     cities:[
+    {n:'新德里',lon:77.2},{n:'孟買',lon:72.9},{n:'班加羅爾',lon:77.6},
+    {n:'標準經度 IST',lon:82.5}]},
+  { tz: 7,  label:'UTC+7 中南半島',    cities:[
+    {n:'曼谷',lon:100.5},{n:'河內',lon:105.8},{n:'雅加達',lon:106.8},
+    {n:'胡志明市',lon:106.7}]},
+  { tz: 8,  label:'UTC+8 中港台星馬',  cities:[
+    {n:'北京',lon:116.4},{n:'上海',lon:121.5},{n:'廣州',lon:113.3},
+    {n:'成都',lon:104.1},{n:'西安',lon:108.9},
+    {n:'台北',lon:121.5},{n:'高雄',lon:120.3},
+    {n:'香港',lon:114.2},{n:'澳門',lon:113.5},
+    {n:'新加坡',lon:103.8},{n:'吉隆坡',lon:101.7},
+    {n:'馬尼拉',lon:121.0},{n:'伯斯',lon:115.9},
+    {n:'標準經度 CST',lon:120}]},
+  { tz: 9,  label:'UTC+9 日韓',        cities:[
+    {n:'東京',lon:139.7},{n:'大阪',lon:135.5},{n:'札幌',lon:141.4},
+    {n:'首爾',lon:127.0},{n:'釜山',lon:129.0},{n:'標準經度 JST',lon:135}]},
+  { tz:10,  label:'UTC+10 澳東',       cities:[
+    {n:'雪梨',lon:151.2},{n:'墨爾本',lon:144.9},{n:'布里斯本',lon:153.0},
+    {n:'標準經度 AEST',lon:150}]},
+  { tz:12,  label:'UTC+12 紐西蘭',     cities:[
+    {n:'奧克蘭',lon:174.8},{n:'威靈頓',lon:174.8}]}
+];
+
 /*
  *  一日 24 小時切為 13 段 (子時跨日，視覺上拆為 子末 0-1 與 子初 23-24)
  */
@@ -318,6 +379,7 @@ const state = {
   weekStart: getWeekStart(new Date()),
   monthCursor: new Date(),
   longitude: -121.8,
+  utcOffset: null, /* null = 跟隨本機時區；數字 = 鎖定該時區 (用於決定標準經線與「現在」的牆鐘) */
   useTST: true,
   mouseX: 0, mouseY: 0,
   mouseInGrid: false,
@@ -340,15 +402,31 @@ function fmtDate(d){return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.ge
 function fmtTime(d){return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`}
 function sameDate(a,b){return a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate()}
 
-/* 真太陽時 = 鐘錶時間 + (經度 - 標準經度) × 4 分鐘 */
+/* 有效 UTC 偏移：state.utcOffset 鎖定時用之，否則跟隨本機 */
+function getEffectiveUtcOffset(date){
+  if (state.utcOffset !== null) return state.utcOffset;
+  return -(date || new Date()).getTimezoneOffset() / 60;
+}
+
+/* 真太陽時 = 牆鐘時間 + (經度 - 標準經度) × 4 分鐘
+ * 標準經度 = 有效 UTC 偏移 × 15° */
 function getTstOffsetMin(date, longitude){
-  const tzH = -date.getTimezoneOffset() / 60;
+  const tzH = getEffectiveUtcOffset(date);
   const standardMeridian = tzH * 15;
   return (longitude - standardMeridian) * 4;
 }
 function toTst(date){
   if (!state.useTST) return new Date(date);
   return new Date(date.getTime() + getTstOffsetMin(date, state.longitude) * 60000);
+}
+
+/* 「該時區現在的牆鐘」— 若鎖定 utcOffset 則把當下 UTC 瞬間轉換為該時區的鐘面時間 */
+function cityNow(){
+  const real = new Date();
+  if (state.utcOffset === null) return real;
+  const deviceH = -real.getTimezoneOffset() / 60;
+  const diffH = state.utcOffset - deviceH;
+  return new Date(real.getTime() + diffH * 3600 * 1000);
 }
 
 /* lunar-javascript 已內建「23時換日」與「五鼠遁時」 */
@@ -392,7 +470,7 @@ function renderPillarCard(el, label, gz, sub){
 function renderWeekHeader(){
   const header = $('week-header');
   header.innerHTML = '<div></div>';
-  const today = new Date();
+  const today = cityNow();
 
   for (let i = 0; i < 7; i++){
     const d = new Date(state.weekStart);
@@ -448,7 +526,7 @@ function renderDayColumn(grid, date, dayIdx){
   col.className = 'relative border-r border-white/5';
   col.dataset.dayIdx = dayIdx;
 
-  const today = new Date();
+  const today = cityNow();
   const isToday = sameDate(date, today);
   const nowFrac = today.getHours() + today.getMinutes()/60 + today.getSeconds()/3600;
 
@@ -619,7 +697,7 @@ function updateRedLine(){
   const grid = $('week-grid');
   const wrap = $('week-grid-wrap');
   const red  = $('red-line');
-  const now  = new Date();
+  const now  = cityNow();
 
   const todayMid = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const dayIdx = Math.floor((todayMid - state.weekStart) / 86400000);
@@ -776,7 +854,7 @@ function renderMonth(){
   const grid = $('month-grid');
   grid.innerHTML = '';
 
-  const today = new Date();
+  const today = cityNow();
 
   for (let i = 0; i < totalCells; i++){
     const cellDate = new Date(y, m, i - startOffset + 1);
@@ -818,13 +896,19 @@ function renderMonth(){
  *  Header — 當下卡片 + 節氣倒計時
  * ============================================================ */
 function renderNow(){
-  const now = new Date();
-  $('now-clock').textContent = fmtTime(now);
+  const now = cityNow();
+  const tzH = getEffectiveUtcOffset(now);
+  const tzLabel = `UTC${tzH>=0?'+':''}${tzH}`;
+  const overridden = state.utcOffset !== null;
+
+  $('now-clock').innerHTML = `${fmtTime(now)} <span class="text-[10px] text-gray-500 font-normal ml-1">${tzLabel}${overridden ? ' <span class="text-cyan-400/70">●</span>' : ''}</span>`;
 
   const tstNow = toTst(now);
+  const real = new Date();
+  const realLocal = overridden ? `　·　本機 ${fmtTime(real)}` : '';
   $('now-tst').textContent = state.useTST
-    ? `TST ${fmtTime(tstNow)} (offset ${getTstOffsetMin(now, state.longitude).toFixed(1)} min)`
-    : `本地時間 (TST 已關閉)`;
+    ? `TST ${fmtTime(tstNow)} (校正 ${getTstOffsetMin(now, state.longitude).toFixed(1)} min)${realLocal}`
+    : `鐘錶時間 (TST 已關閉)${realLocal}`;
 
   const p = getPillars(tstNow);
   const lunar = p.lunar;
@@ -874,6 +958,47 @@ function renderNow(){
 }
 
 /* ============================================================
+ *  時區下拉選單
+ * ============================================================ */
+function buildTzSelect(){
+  const sel = $('tz-preset');
+  let html = '<option value="auto">自動 · 跟隨本機時區</option>';
+  for (const g of TZ_PRESETS){
+    html += `<optgroup label="${g.label}">`;
+    for (const c of g.cities){
+      const sign = c.lon >= 0 ? '+' : '';
+      html += `<option value="${g.tz}|${c.lon}">${c.n} (${sign}${c.lon}°)</option>`;
+    }
+    html += '</optgroup>';
+  }
+  sel.innerHTML = html;
+}
+
+function syncTzDropdown(){
+  const sel = $('tz-preset');
+  /* 先移除任何先前注入的「自訂」選項 */
+  const stale = sel.querySelector('option[data-custom]');
+  if (stale) stale.remove();
+
+  if (state.utcOffset === null){
+    sel.value = 'auto';
+    return;
+  }
+  const target = `${state.utcOffset}|${state.longitude}`;
+  let opt = sel.querySelector(`option[value="${target}"]`);
+  if (!opt){
+    /* 找不到精確匹配 → 注入一個「自訂」選項，讓 select 仍能顯示文字 */
+    opt = document.createElement('option');
+    opt.value = target;
+    opt.dataset.custom = '1';
+    const sign = state.utcOffset >= 0 ? '+' : '';
+    opt.textContent = `— 自訂 · UTC${sign}${state.utcOffset} · ${state.longitude}° —`;
+    sel.insertBefore(opt, sel.firstChild);
+  }
+  sel.value = target;
+}
+
+/* ============================================================
  *  視圖切換
  * ============================================================ */
 function switchView(v){
@@ -902,7 +1027,7 @@ function setupEvents(){
     state.weekStart = d; renderWeek();
   });
   $('this-week').addEventListener('click', () => {
-    state.weekStart = getWeekStart(new Date()); renderWeek();
+    state.weekStart = getWeekStart(cityNow()); renderWeek();
   });
 
   $('prev-month').addEventListener('click', () => {
@@ -914,12 +1039,30 @@ function setupEvents(){
     state.monthCursor = d; renderMonth();
   });
   $('this-month').addEventListener('click', () => {
-    state.monthCursor = new Date(); renderMonth();
+    state.monthCursor = cityNow(); renderMonth();
   });
 
   $('longitude').addEventListener('input', e => {
     const v = parseFloat(e.target.value);
-    if (!isNaN(v)){ state.longitude = v; rerenderAll(); }
+    if (!isNaN(v)){
+      state.longitude = v;
+      syncTzDropdown();
+      rerenderAll();
+    }
+  });
+
+  $('tz-preset').addEventListener('change', e => {
+    const v = e.target.value;
+    if (v === 'auto'){
+      state.utcOffset = null;
+    } else if (v && v.indexOf('|') >= 0){
+      const [tz, lon] = v.split('|').map(Number);
+      state.utcOffset = tz;
+      state.longitude = lon;
+      $('longitude').value = lon;
+    }
+    syncTzDropdown();
+    rerenderAll();
   });
   $('useTST').addEventListener('change', e => {
     state.useTST = e.target.checked; rerenderAll();
@@ -954,8 +1097,10 @@ function setupEvents(){
   function doJump(){
     const v = jumpInput.value;
     if (!v) return;
-    /* datetime-local 採本地時區解析 */
-    const d = new Date(v);
+    /* 把輸入當作「該時區的牆鐘」解析 — 不受瀏覽器本機時區影響 */
+    const m = v.match(/^(\d+)-(\d+)-(\d+)T(\d+):(\d+)(?::(\d+))?/);
+    if (!m) return;
+    const d = new Date(+m[1], +m[2]-1, +m[3], +m[4], +m[5], +(m[6]||0));
     if (isNaN(d.getTime())) return;
     jumpToAnchor(d);
   }
@@ -982,6 +1127,8 @@ function init(){
     document.body.innerHTML = '<div style="padding:40px;text-align:center;color:#ff6b6b;font-family:sans-serif">⚠ lunar-javascript 未能載入，請檢查網路連線。</div>';
     return;
   }
+  buildTzSelect();
+  syncTzDropdown();
   setupEvents();
   rerenderAll();
 
